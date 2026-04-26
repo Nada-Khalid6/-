@@ -1,0 +1,745 @@
+import streamlit as st
+import json
+import os
+import hashlib
+from datetime import datetime
+
+# ─────────────────────────────────────────────
+#  Page config
+# ─────────────────────────────────────────────
+st.set_page_config(
+    page_title="في الإنجاز",
+    page_icon="⚡",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# ─────────────────────────────────────────────
+#  CSS Styling
+# ─────────────────────────────────────────────
+st.markdown("""
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700;900&family=Tajawal:wght@400;500;700&display=swap');
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body, [class*="css"] {
+    font-family: 'Cairo', sans-serif;
+    direction: rtl;
+}
+
+.stApp {
+    background: linear-gradient(135deg, #FFF8F3 0%, #FFF0E8 50%, #F5F0FF 100%);
+    min-height: 100vh;
+}
+
+/* ── Hero ── */
+.hero-section {
+    background: linear-gradient(135deg, #FF6B35 0%, #F7931E 50%, #FF4757 100%);
+    border-radius: 24px;
+    padding: 60px 40px;
+    text-align: center;
+    color: white;
+    margin-bottom: 40px;
+    box-shadow: 0 20px 60px rgba(255,107,53,0.35);
+    position: relative;
+    overflow: hidden;
+}
+.hero-section::before {
+    content: '';
+    position: absolute; top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: radial-gradient(circle, rgba(255,255,255,0.08) 0%, transparent 60%);
+    animation: pulse 4s ease-in-out infinite;
+}
+@keyframes pulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.05);} }
+
+.hero-title {
+    font-size: 3.5rem;
+    font-weight: 900;
+    letter-spacing: -1px;
+    margin-bottom: 12px;
+    text-shadow: 0 4px 20px rgba(0,0,0,0.2);
+}
+.hero-subtitle {
+    font-size: 1.3rem;
+    font-weight: 400;
+    opacity: 0.9;
+    margin-bottom: 8px;
+}
+.hero-tag {
+    display: inline-block;
+    background: rgba(255,255,255,0.2);
+    border: 1px solid rgba(255,255,255,0.4);
+    border-radius: 50px;
+    padding: 6px 20px;
+    font-size: 0.95rem;
+    margin-top: 8px;
+}
+
+/* ── Cards ── */
+.card {
+    background: white;
+    border-radius: 20px;
+    padding: 28px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+    margin-bottom: 20px;
+    border: 1px solid rgba(255,107,53,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 40px rgba(255,107,53,0.15);
+}
+
+.section-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #2D2D2D;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 3px solid #FF6B35;
+    display: inline-block;
+}
+
+/* ── Service Cards ── */
+.service-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 16px;
+    margin-top: 16px;
+}
+.service-card {
+    background: linear-gradient(135deg, #fff8f3, #fff0e8);
+    border: 2px solid #FFE0CC;
+    border-radius: 16px;
+    padding: 20px 12px;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.25s;
+}
+.service-card:hover {
+    border-color: #FF6B35;
+    background: linear-gradient(135deg, #FF6B35, #F7931E);
+    color: white;
+    transform: scale(1.04);
+    box-shadow: 0 8px 24px rgba(255,107,53,0.3);
+}
+.service-icon { font-size: 2.2rem; margin-bottom: 8px; }
+.service-name { font-size: 0.9rem; font-weight: 600; }
+
+/* ── Steps ── */
+.steps-row {
+    display: flex;
+    gap: 16px;
+    flex-wrap: wrap;
+    justify-content: center;
+    margin-top: 16px;
+}
+.step-item {
+    flex: 1; min-width: 140px; max-width: 200px;
+    background: white;
+    border-radius: 16px;
+    padding: 20px 14px;
+    text-align: center;
+    border: 2px solid #FFE0CC;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+}
+.step-num {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg,#FF6B35,#F7931E);
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 900; font-size: 1.1rem;
+    margin: 0 auto 10px;
+}
+.step-text { font-size: 0.9rem; font-weight: 600; color: #333; }
+
+/* ── Features ── */
+.feature-pill {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: linear-gradient(90deg,#fff8f3,#fff0e8);
+    border: 1px solid #FFD4B8;
+    border-radius: 50px;
+    padding: 8px 18px;
+    margin: 6px;
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #CC4400;
+}
+
+/* ── Auth Box ── */
+.auth-box {
+    max-width: 460px;
+    margin: 0 auto;
+    background: white;
+    border-radius: 24px;
+    padding: 40px 36px;
+    box-shadow: 0 8px 40px rgba(255,107,53,0.15);
+    border: 1px solid rgba(255,107,53,0.15);
+}
+.auth-title {
+    font-size: 1.8rem;
+    font-weight: 900;
+    color: #FF6B35;
+    text-align: center;
+    margin-bottom: 6px;
+}
+.auth-sub {
+    text-align: center;
+    color: #888;
+    font-size: 0.95rem;
+    margin-bottom: 28px;
+}
+
+/* ── Booking Form ── */
+.booking-form {
+    background: white;
+    border-radius: 20px;
+    padding: 30px;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.07);
+    border: 2px solid #FFE0CC;
+}
+
+/* ── User Badge ── */
+.user-badge {
+    background: linear-gradient(135deg,#FF6B35,#F7931E);
+    color: white;
+    border-radius: 50px;
+    padding: 10px 24px;
+    display: inline-flex; align-items: center; gap: 10px;
+    font-weight: 700;
+    box-shadow: 0 4px 16px rgba(255,107,53,0.3);
+}
+
+/* ── Reviews ── */
+.review-card {
+    background: #FFFAF7;
+    border-right: 4px solid #FF6B35;
+    border-radius: 12px;
+    padding: 16px 20px;
+    margin-bottom: 14px;
+}
+.review-author { font-weight: 700; color: #333; font-size: 0.95rem; }
+.review-text { color: #555; font-size: 0.9rem; margin-top: 6px; }
+.stars { color: #FFB347; font-size: 1rem; }
+
+/* ── Booking History ── */
+.booking-item {
+    background: white;
+    border-radius: 14px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    border: 1px solid #FFE0CC;
+    display: flex; justify-content: space-between; align-items: center;
+}
+.booking-status {
+    background: #E8F5E9;
+    color: #2E7D32;
+    border-radius: 20px;
+    padding: 4px 14px;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+/* ── Streamlit overrides ── */
+div[data-testid="stButton"] > button {
+    background: linear-gradient(135deg, #FF6B35, #F7931E) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 12px !important;
+    padding: 12px 28px !important;
+    font-family: 'Cairo', sans-serif !important;
+    font-weight: 700 !important;
+    font-size: 1rem !important;
+    width: 100% !important;
+    transition: all 0.2s !important;
+    box-shadow: 0 4px 16px rgba(255,107,53,0.3) !important;
+}
+div[data-testid="stButton"] > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 8px 24px rgba(255,107,53,0.4) !important;
+}
+.stTextInput > div > div > input,
+.stSelectbox > div > div,
+.stTextArea > div > div > textarea {
+    border-radius: 12px !important;
+    border: 2px solid #FFD4B8 !important;
+    font-family: 'Cairo', sans-serif !important;
+    direction: rtl !important;
+}
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus {
+    border-color: #FF6B35 !important;
+    box-shadow: 0 0 0 3px rgba(255,107,53,0.15) !important;
+}
+div[data-testid="stTabs"] button {
+    font-family: 'Cairo', sans-serif !important;
+    font-weight: 600 !important;
+}
+.stSuccess { border-radius: 12px !important; }
+.stError   { border-radius: 12px !important; }
+.stInfo    { border-radius: 12px !important; }
+
+/* footer */
+.footer {
+    text-align: center;
+    color: #aaa;
+    font-size: 0.85rem;
+    padding: 30px 0 10px;
+    border-top: 1px solid #FFE0CC;
+    margin-top: 40px;
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+#  Data helpers  (JSON flat-file "database")
+# ─────────────────────────────────────────────
+USERS_FILE    = "users.json"
+BOOKINGS_FILE = "bookings.json"
+
+def load_json(path):
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+def save_json(path, data):
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+def hash_password(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
+
+def register_user(name, email, password):
+    users = load_json(USERS_FILE)
+    if email in users:
+        return False, "📧 هذا الإيميل مسجل بالفعل"
+    users[email] = {
+        "name": name,
+        "email": email,
+        "password": hash_password(password),
+        "joined": datetime.now().strftime("%Y-%m-%d")
+    }
+    save_json(USERS_FILE, users)
+    return True, "تم التسجيل بنجاح ✅"
+
+def login_user(email, password):
+    users = load_json(USERS_FILE)
+    if email not in users:
+        return False, None, "❌ الإيميل غير مسجل"
+    if users[email]["password"] != hash_password(password):
+        return False, None, "❌ كلمة المرور غير صحيحة"
+    return True, users[email], "مرحباً بك! ✅"
+
+def save_booking(email, service, details, date, time_slot):
+    bookings = load_json(BOOKINGS_FILE)
+    if email not in bookings:
+        bookings[email] = []
+    bookings[email].append({
+        "id": len(bookings[email]) + 1,
+        "service": service,
+        "details": details,
+        "date": date,
+        "time": time_slot,
+        "status": "قيد المعالجة ⏳",
+        "booked_at": datetime.now().strftime("%Y-%m-%d %H:%M")
+    })
+    save_json(BOOKINGS_FILE, bookings)
+
+def get_bookings(email):
+    bookings = load_json(BOOKINGS_FILE)
+    return bookings.get(email, [])
+
+# ─────────────────────────────────────────────
+#  Session State bootstrap
+# ─────────────────────────────────────────────
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "user"      not in st.session_state:
+    st.session_state.user = None
+if "page"      not in st.session_state:
+    st.session_state.page = "home"
+if "booking_service" not in st.session_state:
+    st.session_state.booking_service = None
+
+# ─────────────────────────────────────────────
+#  Services data
+# ─────────────────────────────────────────────
+SERVICES = [
+    {"icon": "🚗", "name": "خدمات سيارات"},
+    {"icon": "🚚", "name": "نقل وتوصيل"},
+    {"icon": "💻", "name": "خدمات أون لاين"},
+    {"icon": "🔧", "name": "سباكة"},
+    {"icon": "⚡", "name": "كهرباء"},
+    {"icon": "🪚", "name": "نجارة"},
+    {"icon": "❄️", "name": "تكييف"},
+    {"icon": "🎨", "name": "نقاشة"},
+    {"icon": "📱", "name": "صيانة أجهزة"},
+    {"icon": "🧹", "name": "نظافة"},
+    {"icon": "🏗️", "name": "خدمات صناعية"},
+]
+
+REVIEWS = [
+    {"name": "أحمد محمد",  "stars": 5, "text": "تطبيق رائع! لقيت كهربائي في نص ساعة وشغله كان ممتاز 🔥"},
+    {"name": "سارة علي",   "stars": 5, "text": "سهل الاستخدام جداً والتقييمات ساعدتني أختار صح ✨"},
+    {"name": "محمود حسن",  "stars": 4, "text": "خدمة ممتازة وأسعار واضحة، هينصح كل حد يستخدمه 👍"},
+    {"name": "نورا خالد",  "stars": 5, "text": "أخيراً تطبيق بالعربي يلاقي خدمات موثوقة بسرعة ❤️"},
+]
+
+# ─────────────────────────────────────────────
+#  Navigation bar
+# ─────────────────────────────────────────────
+def nav_bar():
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col1:
+        if st.session_state.logged_in:
+            st.markdown(f"""
+            <div class="user-badge">
+                👤 {st.session_state.user['name'].split()[0]}
+            </div>""", unsafe_allow_html=True)
+    with col2:
+        st.markdown("""
+        <div style="text-align:center; font-size:1.6rem; font-weight:900; color:#FF6B35; padding:8px 0;">
+            ⚡ في الإنجاز
+        </div>""", unsafe_allow_html=True)
+    with col3:
+        if st.session_state.logged_in:
+            if st.button("تسجيل خروج 🚪"):
+                st.session_state.logged_in = False
+                st.session_state.user = None
+                st.session_state.page = "home"
+                st.rerun()
+
+    # Tab navigation
+    if st.session_state.logged_in:
+        tabs = st.tabs(["🏠 الرئيسية", "🔧 الخدمات", "📅 حجوزاتي", "ℹ️ عن التطبيق"])
+        return tabs
+    return None
+
+# ─────────────────────────────────────────────
+#  Pages
+# ─────────────────────────────────────────────
+
+def show_auth_page():
+    st.markdown("""
+    <div class="hero-section">
+        <div class="hero-title">⚡ في الإنجاز</div>
+        <div class="hero-subtitle">منصة الخدمات المنزلية والصيانة الأولى بالعربي</div>
+        <div class="hero-tag">🔧 كهرباء • سباكة • نجارة • وأكثر</div>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Problem / Solution cards
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("""
+        <div class="card">
+            <div style="font-size:1.3rem; font-weight:800; color:#CC3300; margin-bottom:12px;">
+                😩 المشكلة
+            </div>
+            <ul style="list-style:none; padding:0; line-height:2;">
+                <li>❌ صعوبة الوصول لعمال موثوقين</li>
+                <li>❌ ضياع الوقت في البحث</li>
+                <li>❌ عدم معرفة الأسعار</li>
+                <li>❌ لا توجد تقييمات</li>
+            </ul>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown("""
+        <div class="card">
+            <div style="font-size:1.3rem; font-weight:800; color:#00796B; margin-bottom:12px;">
+                ✅ الحل
+            </div>
+            <ul style="list-style:none; padding:0; line-height:2;">
+                <li>✅ تطبيق يجمع كل الخدمات</li>
+                <li>✅ سهولة البحث والحجز</li>
+                <li>✅ تقييمات المستخدمين</li>
+                <li>✅ أسعار واضحة</li>
+            </ul>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # Auth form
+    st.markdown('<div class="auth-box">', unsafe_allow_html=True)
+    st.markdown('<div class="auth-title">⚡ ابدأ دلوقتي</div>', unsafe_allow_html=True)
+    st.markdown('<div class="auth-sub">سجّل دخولك أو أنشئ حساب جديد</div>', unsafe_allow_html=True)
+
+    tab_login, tab_register = st.tabs(["🔑 تسجيل الدخول", "📝 حساب جديد"])
+
+    with tab_login:
+        st.markdown("<br>", unsafe_allow_html=True)
+        email_l = st.text_input("📧 الإيميل", key="login_email", placeholder="example@email.com")
+        pass_l  = st.text_input("🔒 كلمة المرور", type="password", key="login_pass", placeholder="••••••••")
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("دخول ⚡", key="btn_login"):
+            if email_l and pass_l:
+                ok, user, msg = login_user(email_l.strip(), pass_l)
+                if ok:
+                    st.session_state.logged_in = True
+                    st.session_state.user = user
+                    st.success(f"أهلاً {user['name']}! {msg}")
+                    st.rerun()
+                else:
+                    st.error(msg)
+            else:
+                st.warning("⚠️ ادخل الإيميل وكلمة المرور")
+
+    with tab_register:
+        st.markdown("<br>", unsafe_allow_html=True)
+        name_r  = st.text_input("👤 الاسم كامل", key="reg_name", placeholder="محمد أحمد")
+        email_r = st.text_input("📧 الإيميل", key="reg_email", placeholder="example@email.com")
+        pass_r  = st.text_input("🔒 كلمة المرور", type="password", key="reg_pass", placeholder="••••••••")
+        pass_r2 = st.text_input("🔒 تأكيد كلمة المرور", type="password", key="reg_pass2", placeholder="••••••••")
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("إنشاء حساب 🚀", key="btn_register"):
+            if name_r and email_r and pass_r and pass_r2:
+                if pass_r != pass_r2:
+                    st.error("❌ كلمتا المرور غير متطابقتين")
+                elif len(pass_r) < 6:
+                    st.error("❌ كلمة المرور لازم تكون 6 حروف على الأقل")
+                else:
+                    ok, msg = register_user(name_r.strip(), email_r.strip().lower(), pass_r)
+                    if ok:
+                        st.success(msg)
+                        ok2, user, _ = login_user(email_r.strip().lower(), pass_r)
+                        if ok2:
+                            st.session_state.logged_in = True
+                            st.session_state.user = user
+                            st.rerun()
+                    else:
+                        st.error(msg)
+            else:
+                st.warning("⚠️ من فضلك اكمل كل الحقول")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # Reviews section
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown('<div class="section-title">⭐ آراء المستخدمين</div>', unsafe_allow_html=True)
+    for r in REVIEWS:
+        stars = "⭐" * r["stars"]
+        st.markdown(f"""
+        <div class="review-card">
+            <div class="review-author">{r['name']} &nbsp; <span class="stars">{stars}</span></div>
+            <div class="review-text">{r['text']}</div>
+        </div>""", unsafe_allow_html=True)
+
+
+def show_home_tab():
+    name = st.session_state.user["name"].split()[0]
+    st.markdown(f"""
+    <div class="hero-section">
+        <div class="hero-title">أهلاً {name}! 👋</div>
+        <div class="hero-subtitle">محتاج إيه النهارده؟ اختار الخدمة وإحنا نجيبلك أحسن متخصص</div>
+        <div class="hero-tag">⚡ حجز سريع • تقييمات حقيقية • أسعار واضحة</div>
+    </div>""", unsafe_allow_html=True)
+
+    # Quick stats
+    bookings = get_bookings(st.session_state.user["email"])
+    s1, s2, s3 = st.columns(3)
+    metrics = [
+        (s1, "📅 حجوزاتي", str(len(bookings))),
+        (s2, "⭐ تقييماتي", "5.0"),
+        (s3, "🏆 عضويتي", "مميز"),
+    ]
+    for col, label, val in metrics:
+        with col:
+            st.markdown(f"""
+            <div class="card" style="text-align:center;">
+                <div style="font-size:1.8rem; font-weight:900; color:#FF6B35;">{val}</div>
+                <div style="font-size:0.9rem; color:#666;">{label}</div>
+            </div>""", unsafe_allow_html=True)
+
+    # How to use
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="section-title">📱 طريقة الاستخدام</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div class="steps-row">
+        <div class="step-item">
+            <div class="step-num">١</div>
+            <div class="step-text">تسجيل الدخول</div>
+        </div>
+        <div class="step-item">
+            <div class="step-num">٢</div>
+            <div class="step-text">اختيار الخدمة</div>
+        </div>
+        <div class="step-item">
+            <div class="step-num">٣</div>
+            <div class="step-text">مشاهدة التقييمات</div>
+        </div>
+        <div class="step-item">
+            <div class="step-num">٤</div>
+            <div class="step-text">تأكيد الحجز</div>
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+    # App features
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="section-title">✨ مميزات التطبيق</div>', unsafe_allow_html=True)
+    st.markdown("""
+    <div style="margin-top:10px;">
+        <span class="feature-pill">⚡ سهل الاستخدام</span>
+        <span class="feature-pill">⏰ توفير وقت</span>
+        <span class="feature-pill">⭐ تقييمات حقيقية</span>
+        <span class="feature-pill">💰 أسعار واضحة</span>
+        <span class="feature-pill">💼 توظيف عمالة</span>
+        <span class="feature-pill">🔒 موثوق وآمن</span>
+    </div>""", unsafe_allow_html=True)
+
+    # Reviews
+    st.markdown("<br>", unsafe_allow_html=True)
+    st.markdown('<div class="section-title">⭐ آراء المستخدمين</div>', unsafe_allow_html=True)
+    for r in REVIEWS[:3]:
+        stars = "⭐" * r["stars"]
+        st.markdown(f"""
+        <div class="review-card">
+            <div class="review-author">{r['name']} &nbsp; <span class="stars">{stars}</span></div>
+            <div class="review-text">{r['text']}</div>
+        </div>""", unsafe_allow_html=True)
+
+
+def show_services_tab():
+    st.markdown('<div class="section-title">🔧 الخدمات المتاحة</div>', unsafe_allow_html=True)
+    st.markdown("<p style='color:#666; margin-bottom:20px;'>اختار الخدمة اللي محتاجها وسنوفر لك أفضل متخصص</p>",
+                unsafe_allow_html=True)
+
+    # Service grid using Streamlit columns
+    cols = st.columns(4)
+    for i, svc in enumerate(SERVICES):
+        with cols[i % 4]:
+            st.markdown(f"""
+            <div class="service-card">
+                <div class="service-icon">{svc['icon']}</div>
+                <div class="service-name">{svc['name']}</div>
+            </div>""", unsafe_allow_html=True)
+            if st.button(f"احجز", key=f"svc_{i}"):
+                st.session_state.booking_service = svc["name"]
+
+    # Booking form
+    if st.session_state.booking_service:
+        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown(f'<div class="section-title">📋 حجز خدمة: {st.session_state.booking_service}</div>',
+                    unsafe_allow_html=True)
+
+        with st.form("booking_form"):
+            st.markdown('<div class="booking-form">', unsafe_allow_html=True)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                date = st.date_input("📅 تاريخ الخدمة", min_value=datetime.today())
+            with col2:
+                time_slot = st.selectbox("🕐 الوقت المناسب",
+                    ["صباحاً 8:00 - 10:00", "صباحاً 10:00 - 12:00",
+                     "ظهراً 12:00 - 2:00", "عصراً 2:00 - 4:00",
+                     "مساءً 4:00 - 6:00", "مساءً 6:00 - 8:00"])
+
+            details = st.text_area("📝 تفاصيل المشكلة",
+                placeholder="اشرح المشكلة بالتفصيل عشان نوفرلك أحسن متخصص...",
+                height=120)
+            address = st.text_input("📍 العنوان", placeholder="الحي، الشارع، رقم المبنى...")
+
+            st.markdown('</div>', unsafe_allow_html=True)
+            submitted = st.form_submit_button("✅ تأكيد الحجز")
+
+            if submitted:
+                if details and address:
+                    save_booking(
+                        st.session_state.user["email"],
+                        st.session_state.booking_service,
+                        f"{details} | العنوان: {address}",
+                        str(date),
+                        time_slot
+                    )
+                    st.success(f"🎉 تم حجز خدمة '{st.session_state.booking_service}' بنجاح!\nهيتواصل معك متخصص قريباً.")
+                    st.session_state.booking_service = None
+                    st.rerun()
+                else:
+                    st.warning("⚠️ من فضلك اكتب تفاصيل المشكلة والعنوان")
+
+
+def show_bookings_tab():
+    st.markdown('<div class="section-title">📅 حجوزاتي</div>', unsafe_allow_html=True)
+    bookings = get_bookings(st.session_state.user["email"])
+
+    if not bookings:
+        st.info("🔍 مفيش حجوزات لحد دلوقتي. روح تبّ الخدمات وابدأ! ⚡")
+    else:
+        st.markdown(f"<p style='color:#666;'>عندك <strong>{len(bookings)}</strong> حجز</p>",
+                    unsafe_allow_html=True)
+        for b in reversed(bookings):
+            st.markdown(f"""
+            <div class="booking-item">
+                <div>
+                    <div style="font-weight:800; color:#333; font-size:1rem;">{b['service']}</div>
+                    <div style="color:#888; font-size:0.85rem; margin-top:4px;">
+                        📅 {b['date']} | 🕐 {b['time']}
+                    </div>
+                    <div style="color:#aaa; font-size:0.8rem; margin-top:2px;">{b['details'][:60]}...</div>
+                </div>
+                <div class="booking-status">{b['status']}</div>
+            </div>""", unsafe_allow_html=True)
+
+
+def show_about_tab():
+    st.markdown("""
+    <div class="hero-section">
+        <div class="hero-title">⚡ في الإنجاز</div>
+        <div class="hero-subtitle">وسيط بين العميل ومقدم الخدمة</div>
+    </div>""", unsafe_allow_html=True)
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.markdown("""
+        <div class="card">
+            <div style="font-size:1.2rem; font-weight:800; color:#FF6B35; margin-bottom:14px;">🎯 الفئة المستهدفة</div>
+            <ul style="list-style:none; padding:0; line-height:2.2; color:#444;">
+                <li>👨‍👩‍👧 الأسر</li>
+                <li>🧑 الشباب</li>
+                <li>🏢 أصحاب الشقق</li>
+                <li>👤 أي شخص يحتاج خدمات</li>
+            </ul>
+        </div>""", unsafe_allow_html=True)
+    with c2:
+        st.markdown("""
+        <div class="card">
+            <div style="font-size:1.2rem; font-weight:800; color:#FF6B35; margin-bottom:14px;">💰 نموذج الربح</div>
+            <ul style="list-style:none; padding:0; line-height:2.2; color:#444;">
+                <li>💸 عمولة على كل طلب</li>
+                <li>📢 إعلانات</li>
+                <li>🏆 اشتراكات لمقدمي الخدمة</li>
+            </ul>
+        </div>""", unsafe_allow_html=True)
+
+    st.markdown("""
+    <div class="card" style="margin-top:10px; text-align:center;">
+        <div style="font-size:1.1rem; font-weight:700; color:#555; line-height:2;">
+            في الإنجاز — فكرة بسيطة، قابلة للتنفيذ، وتخدم المجتمع ❤️
+        </div>
+    </div>""", unsafe_allow_html=True)
+
+
+# ─────────────────────────────────────────────
+#  Main render
+# ─────────────────────────────────────────────
+def main():
+    if not st.session_state.logged_in:
+        show_auth_page()
+    else:
+        tabs = nav_bar()
+        if tabs:
+            with tabs[0]: show_home_tab()
+            with tabs[1]: show_services_tab()
+            with tabs[2]: show_bookings_tab()
+            with tabs[3]: show_about_tab()
+
+    st.markdown("""
+    <div class="footer">
+        ⚡ في الإنجاز — جميع الحقوق محفوظة © 2025
+    </div>""", unsafe_allow_html=True)
+
+
+if __name__ == "__main__":
+    main()
