@@ -1,36 +1,4 @@
 import streamlit as st
-
-# Main application logic
-
-def main():
-    st.title('Anjaz Platform')
-    st.sidebar.title('Navigation')
-    choice = st.sidebar.radio('Go to', ['Home', 'Notifications', 'Messaging', 'Verification', 'Chat', 'Time Slots', 'Admin Dashboard'])
-
-    if choice == 'Home':
-        st.write('Welcome to the Anjaz Platform!')
-    elif choice == 'Notifications':
-        # Call notifications component
-        pass
-    elif choice == 'Messaging':
-        # Call messaging component
-        pass
-    elif choice == 'Verification':
-        # Call verification component
-        pass
-    elif choice == 'Chat':
-        # Call chat component
-        pass
-    elif choice == 'Time Slots':
-        # Call time slots component
-        pass
-    elif choice == 'Admin Dashboard':
-        # Call admin dashboard component
-        pass
-
-if __name__ == '__main__':
-    main()
-import streamlit as st
 import json
 import os
 import hashlib
@@ -47,7 +15,7 @@ st.set_page_config(
 )
 
 # ─────────────────────────────────────────────
-#  CSS  — Sidebar فقط المعدل
+#  CSS  — إضافة إظهار زر التحكم بالشريط الجانبي
 # ─────────────────────────────────────────────
 st.markdown("""
 <style>
@@ -70,6 +38,20 @@ html, body, [class*="css"], * {
 section[data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1A1A2E 0%, #16213E 60%, #0F3460 100%) !important;
     width: 280px !important;
+}
+
+/* زر التحكم في إظهار/إخفاء الشريط الجانبي */
+[data-testid="collapsedControl"] {
+    visibility: visible !important;
+    display: block !important;
+    z-index: 999 !important;
+    position: fixed !important;
+    top: 15px !important;
+    left: 15px !important;
+    background: white !important;
+    border-radius: 8px !important;
+    padding: 5px !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.15) !important;
 }
 
 section[data-testid="stSidebar"] .stButton > button {
@@ -228,14 +210,25 @@ div[data-testid="stTabs"] button {
 }
 .stRadio > div { flex-direction: row !important; gap: 14px !important; }
 footer { visibility: hidden; }
+
+/* Chat bubbles */
+.chat-msg {
+    padding: 12px 16px;
+    border-radius: 20px;
+    margin: 6px 0;
+    max-width: 80%;
+    word-wrap: break-word;
+    font-size: 0.92rem;
+}
+.chat-sent { background: #FF6B35; color: white; }
+.chat-recv { background: #F0EBE3; color: #333; }
+.chat-time { font-size: 0.7rem; opacity: 0.7; margin-top: 4px; }
 </style>
 """, unsafe_allow_html=True)
 
 # ─────────────────────────────────────────────
-#  باقي الكود من هنا كما هو تماماً (لم يتغير شيء)
+#  Constants
 # ─────────────────────────────────────────────
-
-# Constants
 SERVICES = [
     {"icon":"🚗","name":"سيارات"},
     {"icon":"🚚","name":"نقل وتوصيل"},
@@ -265,10 +258,14 @@ STATUS_PENDING  = "قيد الانتظار ⏳"
 STATUS_CONFIRM  = "مؤكد ✅"
 STATUS_CANCEL   = "ملغي ❌"
 
-# DB helpers
+# ─────────────────────────────────────────────
+#  File helpers
+# ─────────────────────────────────────────────
 USERS_FILE    = "anjaz_users.json"
 BOOKINGS_FILE = "anjaz_bookings.json"
 REVIEWS_FILE  = "anjaz_reviews.json"
+MESSAGES_FILE = "anjaz_messages.json"
+NOTIFICATIONS_FILE = "anjaz_notifications.json"
 
 def _load(path):
     if os.path.exists(path):
@@ -283,51 +280,77 @@ def _save(path, data):
 def hash_pw(pw):
     return hashlib.sha256(pw.encode()).hexdigest()
 
-def register_user(name,email,password,user_type,city,
-                  service_type=None,bio=None,experience=None):
+# ─────────────────────────────────────────────
+#  User functions (updated with verification fields)
+# ─────────────────────────────────────────────
+def register_user(name, email, password, user_type, city,
+                  service_type=None, bio=None, experience=None,
+                  phone=None, id_number=None):
     users = _load(USERS_FILE)
     if email in users:
         return False,"هذا الإيميل مسجل بالفعل 📧"
+    
+    # محاكاة للتحقق: نضع verified=True إذا تم توفير رقم هاتف وبطاقة
+    verified = False
+    if user_type == "provider" and phone and id_number:
+        if len(phone) >= 11 and len(id_number) == 14:  # مثال: 14 رقم للبطاقة
+            verified = True
+
     users[email] = {
-        "name":name,"email":email,
+        "name":name,
+        "email":email,
         "password":hash_pw(password),
-        "type":user_type,"city":city,
+        "type":user_type,
+        "city":city,
         "service_type":service_type,
-        "bio":bio or "","experience":experience or "",
+        "bio":bio or "",
+        "experience":experience or "",
+        "phone":phone or "",
+        "id_number":id_number or "",
+        "verified":verified,
         "joined":datetime.now().strftime("%Y-%m-%d"),
-        "rating":0.0,"rating_count":0,
+        "rating":0.0,
+        "rating_count":0,
     }
-    _save(USERS_FILE,users)
+    _save(USERS_FILE, users)
     return True,"تم التسجيل بنجاح ✅"
 
-def login_user(email,password):
+def login_user(email, password):
     users = _load(USERS_FILE)
     if email not in users:
-        return False,None,"الإيميل غير مسجل ❌"
+        return False, None, "الإيميل غير مسجل ❌"
     if users[email]["password"] != hash_pw(password):
-        return False,None,"كلمة المرور غير صحيحة ❌"
-    return True,users[email],"مرحباً بك ✅"
+        return False, None, "كلمة المرور غير صحيحة ❌"
+    return True, users[email], "مرحباً بك ✅"
 
 def get_all_users():
     return _load(USERS_FILE)
 
-def get_providers(service=None,city=None):
+def get_providers(service=None, city=None, min_rating=0, keyword=""):
     users = _load(USERS_FILE)
     result = [u for u in users.values() if u["type"]=="provider"]
     if service: result = [u for u in result if u.get("service_type")==service]
     if city:    result = [u for u in result if u.get("city")==city]
+    if min_rating > 0:
+        result = [u for u in result if u.get("rating",0) >= min_rating]
+    if keyword:
+        kw = keyword.lower()
+        result = [u for u in result if kw in u["name"].lower() or kw in u.get("bio","").lower()]
     return result
 
-def update_rating(provider_email,new_rating):
+def update_rating(provider_email, new_rating):
     users = _load(USERS_FILE)
     if provider_email in users:
         u = users[provider_email]
         old_total = u["rating"]*u["rating_count"]
         u["rating_count"] += 1
         u["rating"] = round((old_total+new_rating)/u["rating_count"],1)
-        _save(USERS_FILE,users)
+        _save(USERS_FILE, users)
 
-def save_booking(client_email,provider_email,service,details,date,time_slot):
+# ─────────────────────────────────────────────
+#  Booking functions
+# ─────────────────────────────────────────────
+def save_booking(client_email, provider_email, service, details, date, time_slot):
     bookings = _load(BOOKINGS_FILE)
     bid = f"B{len(bookings)+1:04d}_{datetime.now().strftime('%H%M%S')}"
     bookings[bid] = {
@@ -337,20 +360,29 @@ def save_booking(client_email,provider_email,service,details,date,time_slot):
         "status":STATUS_PENDING,"rated":False,
         "booked_at":datetime.now().strftime("%Y-%m-%d %H:%M"),
     }
-    _save(BOOKINGS_FILE,bookings)
+    _save(BOOKINGS_FILE, bookings)
+    # إشعار لمقدم الخدمة
+    add_notification(provider_email, f"طلب حجز جديد من {client_email}")
     return bid
 
-def update_booking_status(bid,new_status):
+def update_booking_status(bid, new_status):
     bookings = _load(BOOKINGS_FILE)
     if bid in bookings:
         bookings[bid]["status"] = new_status
-        _save(BOOKINGS_FILE,bookings)
+        _save(BOOKINGS_FILE, bookings)
+        b = bookings[bid]
+        client_email = b["client"]
+        provider_email = b["provider"]
+        # إشعار للعميل
+        add_notification(client_email, f"طلب الحجز {bid} أصبح: {new_status}")
+        # إشعار لمقدم الخدمة
+        add_notification(provider_email, f"تم تحديث الطلب {bid} إلى {new_status}")
 
 def mark_rated(bid):
     bookings = _load(BOOKINGS_FILE)
     if bid in bookings:
         bookings[bid]["rated"] = True
-        _save(BOOKINGS_FILE,bookings)
+        _save(BOOKINGS_FILE, bookings)
 
 def get_client_bookings(client_email):
     return [b for b in _load(BOOKINGS_FILE).values() if b["client"]==client_email]
@@ -358,7 +390,10 @@ def get_client_bookings(client_email):
 def get_provider_bookings(provider_email):
     return [b for b in _load(BOOKINGS_FILE).values() if b["provider"]==provider_email]
 
-def save_review(provider_email,client_name,rating,comment):
+# ─────────────────────────────────────────────
+#  Reviews
+# ─────────────────────────────────────────────
+def save_review(provider_email, client_name, rating, comment):
     reviews = _load(REVIEWS_FILE)
     if provider_email not in reviews:
         reviews[provider_email]=[]
@@ -366,15 +401,83 @@ def save_review(provider_email,client_name,rating,comment):
         "client":client_name,"rating":rating,
         "comment":comment,"date":datetime.now().strftime("%Y-%m-%d"),
     })
-    _save(REVIEWS_FILE,reviews)
+    _save(REVIEWS_FILE, reviews)
 
 def get_reviews(provider_email):
-    return _load(REVIEWS_FILE).get(provider_email,[])
+    return _load(REVIEWS_FILE).get(provider_email, [])
 
-# Session state
+# ─────────────────────────────────────────────
+#  Messaging
+# ─────────────────────────────────────────────
+def get_all_messages():
+    return _load(MESSAGES_FILE)
+
+def send_message(sender, receiver, text):
+    msgs = get_all_messages()
+    if "messages" not in msgs:
+        msgs["messages"] = []
+    msgs["messages"].append({
+        "from": sender,
+        "to": receiver,
+        "text": text,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    })
+    _save(MESSAGES_FILE, msgs)
+    # إشعار للمستقبل
+    add_notification(receiver, f"رسالة جديدة من {sender}")
+
+def get_conversation(user1, user2):
+    msgs = get_all_messages().get("messages", [])
+    return [m for m in msgs if (m["from"]==user1 and m["to"]==user2) or (m["from"]==user2 and m["to"]==user1)]
+
+def get_chat_partners(email):
+    """كل المستخدمين الذين تبادلت معهم رسائل"""
+    msgs = get_all_messages().get("messages", [])
+    partners = set()
+    for m in msgs:
+        if m["from"] == email:
+            partners.add(m["to"])
+        elif m["to"] == email:
+            partners.add(m["from"])
+    return list(partners)
+
+# ─────────────────────────────────────────────
+#  Notifications
+# ─────────────────────────────────────────────
+def add_notification(user_email, message):
+    notif = _load(NOTIFICATIONS_FILE)
+    if "notifications" not in notif:
+        notif["notifications"] = []
+    notif["notifications"].append({
+        "user": user_email,
+        "message": message,
+        "read": False,
+        "time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "id": len(notif["notifications"])
+    })
+    _save(NOTIFICATIONS_FILE, notif)
+
+def get_notifications(user_email):
+    notif = _load(NOTIFICATIONS_FILE).get("notifications", [])
+    return [n for n in notif if n["user"] == user_email]
+
+def unread_count(user_email):
+    return len([n for n in get_notifications(user_email) if not n["read"]])
+
+def mark_all_read(user_email):
+    notif = _load(NOTIFICATIONS_FILE)
+    for n in notif.get("notifications", []):
+        if n["user"] == user_email:
+            n["read"] = True
+    _save(NOTIFICATIONS_FILE, notif)
+
+# ─────────────────────────────────────────────
+#  Session state
+# ─────────────────────────────────────────────
 for k,v in {
     "logged_in":False,"user":None,"page":"home",
     "selected_service":None,"selected_provider":None,
+    "chat_partner":None,
 }.items():
     if k not in st.session_state:
         st.session_state[k]=v
@@ -383,7 +486,9 @@ def go(page):
     st.session_state.page=page
     st.rerun()
 
-# Sidebar
+# ─────────────────────────────────────────────
+#  Sidebar
+# ─────────────────────────────────────────────
 def render_sidebar():
     with st.sidebar:
         st.markdown("""
@@ -407,12 +512,19 @@ def render_sidebar():
             </div>""", unsafe_allow_html=True)
 
             st.markdown("<div style='padding:0 10px;'>", unsafe_allow_html=True)
+            notifications_badge = ""
+            if u:
+                unread = unread_count(u["email"])
+                if unread > 0:
+                    notifications_badge = f" 🔴({unread})"
 
             if u["type"]=="client":
                 menu=[
                     ("🏠","الرئيسية","home"),
                     ("🔧","الخدمات","services"),
                     ("📅","حجوزاتي","my_bookings"),
+                    ("💬","الرسائل","messaging"),
+                    ("🔔",f"الإشعارات{notifications_badge}","notifications"),
                     ("ℹ️","عن التطبيق","about"),
                 ]
             else:
@@ -420,6 +532,8 @@ def render_sidebar():
                     ("🏠","لوحة التحكم","home"),
                     ("📋","طلباتي","provider_orders"),
                     ("👤","ملفي الشخصي","provider_profile"),
+                    ("💬","الرسائل","messaging"),
+                    ("🔔",f"الإشعارات{notifications_badge}","notifications"),
                     ("ℹ️","عن التطبيق","about"),
                 ]
 
@@ -448,7 +562,9 @@ def render_sidebar():
             if st.button("ℹ️  عن التطبيق"):     go("about")
             st.markdown("</div>", unsafe_allow_html=True)
 
-# Auth pages
+# ─────────────────────────────────────────────
+#  Auth pages (with verification fields)
+# ─────────────────────────────────────────────
 def page_login():
     st.markdown('<div class="auth-wrap">', unsafe_allow_html=True)
     st.markdown('<div class="auth-title">⚡ تسجيل الدخول</div>', unsafe_allow_html=True)
@@ -478,7 +594,6 @@ def page_login():
         go("register")
     st.markdown('</div>', unsafe_allow_html=True)
 
-
 def page_register():
     st.markdown('<div class="auth-wrap" style="max-width:580px;">', unsafe_allow_html=True)
     st.markdown('<div class="auth-title">📝 حساب جديد</div>', unsafe_allow_html=True)
@@ -502,7 +617,7 @@ def page_register():
 
     city = st.selectbox("📍 المحافظة", CITIES, key="rc")
 
-    service_type=bio=experience=None
+    phone = id_number = service_type = bio = experience = None
     if is_provider:
         st.markdown("---")
         st.markdown("**🔧 معلومات الخدمة**")
@@ -511,6 +626,13 @@ def page_register():
             placeholder="اكتب نبذة عن خبرتك وما تقدمه للعملاء...",
             height=90, key="rb")
         experience = st.text_input("📅 سنوات الخبرة", placeholder="مثلاً: 5 سنوات", key="rx")
+        
+        # حقول التوثيق
+        st.markdown("**🛡️ توثيق الهوية (مطلوب للتحقق)**")
+        phone = st.text_input("📱 رقم الهاتف", placeholder="01xxxxxxxxx", key="rphone")
+        id_number = st.text_input("🆔 رقم البطاقة القومية", placeholder="14 رقم", key="rid")
+    else:
+        phone = st.text_input("📱 رقم الهاتف (اختياري)", placeholder="01xxxxxxxxx", key="rphone_cli")
 
     st.markdown("<br>", unsafe_allow_html=True)
     if st.button("إنشاء الحساب 🚀", key="btn_reg"):
@@ -521,8 +643,8 @@ def page_register():
                 st.error("كلمة المرور أقل من 6 أحرف ❌")
             else:
                 utype="provider" if is_provider else "client"
-                ok,msg = register_user(name.strip(),email.strip().lower(),pw,
-                                       utype,city,service_type,bio,experience)
+                ok,msg = register_user(name.strip(),email.strip().lower(),pw, utype, city,
+                                       service_type,bio,experience, phone, id_number)
                 if ok:
                     ok2,user,_ = login_user(email.strip().lower(),pw)
                     if ok2:
@@ -540,7 +662,9 @@ def page_register():
         go("login")
     st.markdown('</div>', unsafe_allow_html=True)
 
-# Landing page
+# ─────────────────────────────────────────────
+#  Landing page
+# ─────────────────────────────────────────────
 def page_landing():
     st.markdown("""
     <div class="hero">
@@ -582,7 +706,9 @@ def page_landing():
         if st.button("🔑 سجّل دخولك وابدأ الآن ⚡", key="landing_cta"):
             go("login")
 
-# Client pages
+# ─────────────────────────────────────────────
+#  Client pages
+# ─────────────────────────────────────────────
 def page_client_home():
     u = st.session_state.user
     bookings = get_client_bookings(u["email"])
@@ -622,18 +748,22 @@ def page_client_home():
 def page_services():
     st.markdown('<div class="section-title">🔧 تصفح مقدمي الخدمة</div>', unsafe_allow_html=True)
 
-    c1,c2 = st.columns(2)
-    with c1:
+    col1, col2, col3 = st.columns([2,2,1])
+    with col1:
         default_idx=(SERVICE_NAMES.index(st.session_state.selected_service)+1
                      if st.session_state.selected_service else 0)
-        filter_svc = st.selectbox("نوع الخدمة",["الكل"]+SERVICE_NAMES,
-                                  index=default_idx, key="fs")
-    with c2:
+        filter_svc = st.selectbox("نوع الخدمة",["الكل"]+SERVICE_NAMES, index=default_idx, key="fs")
+    with col2:
         filter_city = st.selectbox("المحافظة",["الكل"]+CITIES, key="fc")
+    with col3:
+        min_rating = st.slider("أدنى تقييم ⭐", 0.0, 5.0, 0.0, 0.5, key="min_rating")
 
-    svc_q  = None if filter_svc =="الكل" else filter_svc
-    city_q = None if filter_city=="الكل" else filter_city
-    providers = get_providers(svc_q, city_q)
+    st.text_input("🔍 بحث بالاسم أو النبذة", key="search_keyword")
+
+    svc_q   = None if filter_svc =="الكل" else filter_svc
+    city_q  = None if filter_city=="الكل" else filter_city
+    keyword = st.session_state.get("search_keyword","").strip()
+    providers = get_providers(svc_q, city_q, min_rating, keyword)
 
     if not providers:
         st.info("🔍 لا يوجد مقدمو خدمة بهذا الاختيار حتى الآن.")
@@ -650,12 +780,13 @@ def page_services():
         stars    = "⭐"*round(rating) if rating else "لا يوجد تقييم بعد"
         icon     = SERVICE_ICON.get(p.get("service_type",""),"🔧")
         reviews  = get_reviews(p["email"])
+        verified_badge = " 🛡️ موثق" if p.get("verified") else ""
 
         st.markdown(f"""
         <div class="pcard">
             <div class="bitem-header">
                 <div>
-                    <div class="pname">{icon} {p['name']}</div>
+                    <div class="pname">{icon} {p['name']}{verified_badge}</div>
                     <div class="pmeta">📍 {p.get('city','—')} &nbsp;|&nbsp; 🔧 {p.get('service_type','—')}</div>
                     <div class="pmeta">⏱️ خبرة: {p.get('experience','غير محدد')}</div>
                 </div>
@@ -687,6 +818,9 @@ def page_services():
             if st.button("📅 احجز الآن", key=f"bk_{p['email']}"):
                 st.session_state.selected_provider=p
                 go("booking")
+            if st.button("💬 راسله", key=f"chat_{p['email']}"):
+                st.session_state.chat_partner = p["email"]
+                go("messaging")
 
 def page_booking():
     p = st.session_state.selected_provider
@@ -794,7 +928,9 @@ def page_my_bookings():
                     st.success("شكراً على تقييمك! ⭐")
                     st.rerun()
 
-# Provider pages
+# ─────────────────────────────────────────────
+#  Provider pages
+# ─────────────────────────────────────────────
 def page_provider_home():
     u         = st.session_state.user
     orders    = get_provider_bookings(u["email"])
@@ -802,11 +938,12 @@ def page_provider_home():
     rating    = u.get("rating",0)
     r_count   = u.get("rating_count",0)
     icon      = SERVICE_ICON.get(u.get("service_type",""),"🔧")
+    verified  = "✅ موثق" if u.get("verified") else "❌ غير موثق"
 
     st.markdown(f"""
     <div class="hero">
         <h1>{icon} أهلاً {u['name'].split()[0]}!</h1>
-        <p>لوحة التحكم — {u.get('service_type','')}</p>
+        <p>لوحة التحكم — {u.get('service_type','')} | {verified}</p>
     </div>""", unsafe_allow_html=True)
 
     pending = [o for o in orders if STATUS_PENDING in o["status"]]
@@ -910,6 +1047,7 @@ def page_provider_profile():
     r_count = u.get("rating_count",0)
     stars   = "⭐"*round(rating) if rating else "لا يوجد تقييم بعد"
     reviews = get_reviews(u["email"])
+    verified_badge = "✅ موثق" if u.get("verified") else "❌ غير موثق"
 
     st.markdown('<div class="section-title">👤 ملفي الشخصي</div>', unsafe_allow_html=True)
 
@@ -918,7 +1056,7 @@ def page_provider_profile():
         <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap;">
             <div style="font-size:3rem;">{icon}</div>
             <div>
-                <div style="font-size:1.2rem;font-weight:900;color:#1A1A2E;">{u['name']}</div>
+                <div style="font-size:1.2rem;font-weight:900;color:#1A1A2E;">{u['name']} {verified_badge}</div>
                 <div style="color:#888;font-size:0.87rem;">
                     📍 {u.get('city','—')} &nbsp;|&nbsp; 🔧 {u.get('service_type','—')}
                 </div>
@@ -950,6 +1088,113 @@ def page_provider_profile():
     else:
         st.info("لم تصلك تقييمات بعد ⭐")
 
+# ─────────────────────────────────────────────
+#  Messaging page
+# ─────────────────────────────────────────────
+def page_messaging():
+    u = st.session_state.user
+    all_users = get_all_users()
+
+    st.markdown('<div class="section-title">💬 المحادثات</div>', unsafe_allow_html=True)
+
+    # قائمة جهات الاتصال المحتملة
+    if u["type"] == "client":
+        # كل مقدمي الخدمة، أو من تعامل معهم
+        providers = get_providers()
+        contacts = {p["email"]: p["name"] for p in providers}
+    else:
+        # العملاء الذين حجزوا معي أو راسلتهم
+        bookings = get_provider_bookings(u["email"])
+        clients_emails = set()
+        for b in bookings:
+            clients_emails.add(b["client"])
+        # أيضًا من المحادثات
+        chat_partners = get_chat_partners(u["email"])
+        clients_emails.update(chat_partners)
+        contacts = {}
+        for email in clients_emails:
+            user = all_users.get(email)
+            if user:
+                contacts[email] = user["name"]
+
+    # إذا كنت فاتح محادثة مع شخص محدد
+    if st.session_state.chat_partner and st.session_state.chat_partner in contacts:
+        partner_email = st.session_state.chat_partner
+        partner_name = contacts[partner_email]
+    else:
+        partner_email = None
+        partner_name = None
+
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        st.subheader("جهات الاتصال")
+        if contacts:
+            for email, name in contacts.items():
+                if st.button(f"{'🟢' if email==partner_email else '⚪'} {name}", key=f"contact_{email}"):
+                    st.session_state.chat_partner = email
+                    st.rerun()
+        else:
+            st.info("لا يوجد جهات اتصال بعد.")
+
+    with col2:
+        if partner_email:
+            st.subheader(f"محادثة مع {partner_name}")
+            msgs = get_conversation(u["email"], partner_email)
+            # عرض الرسائل
+            chat_container = st.container()
+            with chat_container:
+                for msg in msgs:
+                    is_me = msg["from"] == u["email"]
+                    align = "left" if is_me else "right"
+                    color_class = "chat-sent" if is_me else "chat-recv"
+                    st.markdown(f"""
+                    <div style="display:flex; justify-content:{'flex-end' if is_me else 'flex-start'};">
+                        <div class="chat-msg {color_class}">
+                            {msg["text"]}
+                            <div class="chat-time">{msg["timestamp"]}</div>
+                        </div>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+            # إرسال رسالة جديدة
+            with st.form(key="chat_form", clear_on_submit=True):
+                new_msg = st.text_input("اكتب رسالتك...", key="msg_input")
+                if st.form_submit_button("إرسال") and new_msg:
+                    send_message(u["email"], partner_email, new_msg)
+                    st.rerun()
+        else:
+            st.info("اختر جهة اتصال للبدء")
+
+# ─────────────────────────────────────────────
+#  Notifications page
+# ─────────────────────────────────────────────
+def page_notifications():
+    u = st.session_state.user
+    notifications = get_notifications(u["email"])
+
+    st.markdown('<div class="section-title">🔔 الإشعارات</div>', unsafe_allow_html=True)
+
+    if not notifications:
+        st.info("لا توجد إشعارات حالياً.")
+        return
+
+    if st.button("✅ تعليم الكل كمقروء"):
+        mark_all_read(u["email"])
+        st.rerun()
+
+    for n in reversed(notifications):
+        bg = "#FFF3EC" if not n["read"] else "#F9F9F9"
+        st.markdown(f"""
+        <div style="background:{bg}; padding:12px; border-radius:10px; margin-bottom:8px;
+                    border-right: 4px solid {'#FF6B35' if not n['read'] else '#ccc'};">
+            <div style="font-size:0.9rem;">{n['message']}</div>
+            <div style="color:#999; font-size:0.7rem; margin-top:5px;">{n['time']}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ─────────────────────────────────────────────
+#  About page
+# ─────────────────────────────────────────────
 def page_about():
     st.markdown("""
     <div class="hero">
@@ -985,7 +1230,9 @@ def page_about():
         </div>
     </div>""", unsafe_allow_html=True)
 
-# Router
+# ─────────────────────────────────────────────
+#  Router
+# ─────────────────────────────────────────────
 def main():
     render_sidebar()
 
@@ -1001,18 +1248,22 @@ def main():
         return
 
     if u["type"]=="client":
-        if   page=="home":        page_client_home()
-        elif page=="services":    page_services()
-        elif page=="booking":     page_booking()
-        elif page=="my_bookings": page_my_bookings()
-        elif page=="about":       page_about()
-        else:                     page_client_home()
+        if   page=="home":         page_client_home()
+        elif page=="services":     page_services()
+        elif page=="booking":      page_booking()
+        elif page=="my_bookings":  page_my_bookings()
+        elif page=="messaging":    page_messaging()
+        elif page=="notifications":page_notifications()
+        elif page=="about":        page_about()
+        else:                      page_client_home()
     else:
-        if   page=="home":             page_provider_home()
-        elif page=="provider_orders":  page_provider_orders()
-        elif page=="provider_profile": page_provider_profile()
-        elif page=="about":            page_about()
-        else:                          page_provider_home()
+        if   page=="home":               page_provider_home()
+        elif page=="provider_orders":    page_provider_orders()
+        elif page=="provider_profile":   page_provider_profile()
+        elif page=="messaging":          page_messaging()
+        elif page=="notifications":      page_notifications()
+        elif page=="about":              page_about()
+        else:                            page_provider_home()
 
 if __name__=="__main__":
     main()
